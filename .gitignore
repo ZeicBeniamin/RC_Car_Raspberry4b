@@ -1,0 +1,6 @@
+# Ignore C++ executable files
+*.out
+# Ignore files that begin with "test" - those are for testing purposes only
+test*
+
+.vscode/

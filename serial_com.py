@@ -1,6 +1,103 @@
+from enum import Enum
+from time import sleep
 import serial
 import threading
 import time
+
+
+class SwapFlag(Enum):
+    SWP_BUFFER_READY = 1
+    SWP_BUFFER_REQUEST_SWAP = 2
+
+class RxFlag(Enum):
+    RX_BUFFER_READY = 1 
+    RX_BUFFER_BUSY_READING = 2
+    
+
+class UartMessageHandler:
+    """ Stores messages received through UART; returns them on-demand
+
+        The messages are received from threads responsible with UART
+        reading
+    """
+    def __init__(self):
+        """ Initialize the variables of the class
+        """
+        self._rx_buffer1 = ""
+        self._rx_buffer2 = ""
+
+        self._swap_flag = None
+        self._swap_flag = SwapFlag(SwapFlag.SWP_BUFFER_READY)
+    
+        self._rx_state = RxFlag(RxFlag.RX_BUFFER_READY)
+
+        # _in_use_buffer indicates the currently used buffer
+        self._in_use_buffer = self._rx_buffer1
+        return
+
+    def receive_msg(self, rx_string):
+        """ Receive UART message from reading thread 
+
+            UART message is stored in the attributes of the class. We use a
+            double buffer system for storing data
+
+            Parameters
+            ----------
+            rx_string : str
+                String received through the UART channel
+        """
+
+        # Check if a swap request was previously made by this method
+        if (self._swap_flag == SwapFlag.SWP_BUFFER_READY):
+            # Check the active buffer (the buffer to write to)
+            if (self._in_use_buffer == self._rx_buffer1):
+                # Write received string to buffer
+                self._rx_buffer1 = rx_string
+                # Change the active buffer, or request a swap, if the 
+                # buffer is not currently available
+                if (self._rx_state == RxFlag.RX_BUFFER_READY):
+                    self._in_use_buffer = self._rx_buffer2
+                else:
+                    self._swap_flag = SwapFlag.SWP_BUFFER_REQUEST_SWAP
+            # Repeat the  structure used for writing in _rx_buffer1
+            # for writing in _rx_buffer2
+            elif (self._in_use_buffer == self._rx_buffer2):
+                self._rx_buffer2 = rx_string
+                if (self._rx_state == RxFlag.RX_BUFFER_READY):
+                    self._in_use_buffer = self._rx_buffer1
+                else:
+                    self._swap_flag = SwapFlag.SWP_BUFFER_REQUEST_SWAP
+        print("Swap flag is " + str(self._swap_flag.value))
+        return
+
+    def read_msg(self):
+        """ Read UART message stored in the inactive buffer
+
+            UART message is stored in one of the two internal buffers.
+            This function retrieves the message from the buffer which
+            is not currently in use.
+        """
+
+        aux = ""
+        # Lock the resource by flagging it as busy
+        self._rx_state = RxFlag.RX_BUFFER_BUSY_READING
+        # TODO: Remove sleep
+        # sleep(1)
+        if (self._in_use_buffer == self._rx_buffer1):
+            aux = self._rx_buffer2
+        else:
+            aux = self._rx_buffer1
+        self._rx_state = RxFlag.RX_BUFFER_READY
+
+        if (self._swap_flag == SwapFlag.SWP_BUFFER_REQUEST_SWAP):
+            if (self._in_use_buffer == self._rx_buffer1):
+                self._in_use_buffer = self._rx_buffer2
+                self._swap_flag = SwapFlag.SWP_BUFFER_READY
+            else: 
+                self._in_use_buffer = self._rx_buffer1
+                self._swap_flag = SwapFlag.SWP_BUFFER_READY
+            
+        return aux
 
 delay = 0.001
 n = 100
@@ -8,14 +105,6 @@ n = 100
 port0 = '/dev/ttyACM0'
 port1 = '/dev/ttyACM1'
 baud = 115200
-
-
-# # Send n times 8-bit strings to the STM via UART to test the robustness of the connection
-# for i in range(n):
-#     ser.write("test1234".encode())
-#     time.sleep(delay)
-# ser.write("123fdval".encode())
- 
 
 def parse(message):
     """ Rearrange the message received through UART
@@ -27,6 +116,7 @@ def parse(message):
         with a '<' character (called heading byte), and ends with a '>'
         character (called stop byte). By having this convention, we can
         easily rearrange the message in the correct form.
+        
         Example: We were sent the message "<234567>" through UART,
         but we received the string "67><2345". We can see that the
         message suffered a circular shift with 3 positions to the right
@@ -66,7 +156,7 @@ def parse(message):
 
     return rearranged
 
-def ser_read(ser):
+def ser_read(ser, uart_msg_handler):
     """ Read 8 bytes at a time from the UART serial port in an infinite
         loop
 
@@ -75,18 +165,20 @@ def ser_read(ser):
         ser : Serial
             Serial port to read from
     """
+    
     while True:
         try:
             reading = ser.read(8).decode()
-            parsed = parse(reading)
-    # Print message received from UART and the processed message
-    # TODO: Remove after completing tests
-            print (reading)
-            print(parsed)
+            # Print message received from UART and the processed message
+            # Store message in uart handling class
+            # TODO: Remove after completing tests
+            processed = parse(reading)
+            uart_msg_handler.receive_msg(processed)
+            print ("Storing message in uart handling class" + reading)
         except:
             print("exception gen")
 
-def ser_write(ser):
+def ser_write(ser, uart_message_handler):
     """ Write 8 bytes at a time to the UART serial port in an infinite
         loop
 
@@ -97,12 +189,15 @@ def ser_write(ser):
     """
     i = 0
     test = "pi.><ras"
+    test = "<CONACC>"
     while True:
         # i += 1
         ser.write(test.encode())
         print("send " + str(i))
         time.sleep(1)
-        
+
+
+
 # Open the serial port that connects to STM32. It may be connected on 
 # ACM0 or ACM1
 try:
@@ -110,18 +205,22 @@ try:
 except:
     ser = serial.Serial(port0, baud)
 
+uart_message_handler = UartMessageHandler()
+
 # Start two other threads for reading and writing to UART
-thread_read = threading.Thread(target=ser_read, args=(ser,))
-thread_write = threading.Thread(target=ser_write, args=(ser,))
+thread_read = threading.Thread(target=ser_read, args=(ser, uart_message_handler))
+thread_write = threading.Thread(target=ser_write, args=(ser, uart_message_handler))
 
 thread_read.start()
 thread_write.start()
+
 
 # Print a message from main as an indication that the program is 
 # running
 while True:
     print("Alive - one second delay")
-    time.sleep(1)
+    print("Uart message" + uart_message_handler.read_msg())
+
 
 # Close the serial port after using it
 ser.close()
