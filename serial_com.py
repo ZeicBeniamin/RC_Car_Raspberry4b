@@ -12,7 +12,17 @@ class SwapFlag(Enum):
 class RxFlag(Enum):
     RX_BUFFER_READY = 1 
     RX_BUFFER_BUSY_READING = 2
-    
+
+# -------------------------- IMPORTANT TODO ---------------------------
+
+# TODO: Complete the TODO's in this file before proceding to anything
+#        else
+
+# -------------------------- IMPORTANT TODO - END ---------------------
+
+
+# TODO: Document the UartMessageHandler class better
+#       Add docstring to class and to each of the methods
 
 class UartMessageHandler:
     """ Stores messages received through UART; returns them on-demand
@@ -67,7 +77,7 @@ class UartMessageHandler:
                     self._in_use_buffer = self._rx_buffer1
                 else:
                     self._swap_flag = SwapFlag.SWP_BUFFER_REQUEST_SWAP
-        print("Swap flag is " + str(self._swap_flag.value))
+        
         return
 
     def read_msg(self):
@@ -81,14 +91,14 @@ class UartMessageHandler:
         aux = ""
         # Lock the resource by flagging it as busy
         self._rx_state = RxFlag.RX_BUFFER_BUSY_READING
-        # TODO: Remove sleep
-        # sleep(1)
         if (self._in_use_buffer == self._rx_buffer1):
             aux = self._rx_buffer2
         else:
             aux = self._rx_buffer1
+        # Unlock the resource after reading its content
         self._rx_state = RxFlag.RX_BUFFER_READY
 
+        # If there was any swap request, perform it now
         if (self._swap_flag == SwapFlag.SWP_BUFFER_REQUEST_SWAP):
             if (self._in_use_buffer == self._rx_buffer1):
                 self._in_use_buffer = self._rx_buffer2
@@ -96,8 +106,8 @@ class UartMessageHandler:
             else: 
                 self._in_use_buffer = self._rx_buffer1
                 self._swap_flag = SwapFlag.SWP_BUFFER_READY
-            
-        return aux
+        # TODO: Test that message parsing works correctly            
+        return parse(aux)
 
 delay = 0.001
 n = 100
@@ -169,12 +179,8 @@ def ser_read(ser, uart_msg_handler):
     while True:
         try:
             reading = ser.read(8).decode()
-            # Print message received from UART and the processed message
-            # Store message in uart handling class
-            # TODO: Remove after completing tests
-            processed = parse(reading)
-            uart_msg_handler.receive_msg(processed)
-            print ("Storing message in uart handling class" + reading)
+            # Store raw message in uart handling class
+            uart_msg_handler.receive_msg(reading)
         except:
             print("exception gen")
 
@@ -187,16 +193,17 @@ def ser_write(ser, uart_message_handler):
         ser : Serial
             Serial port to write to
     """
-    i = 0
     test = "pi.><ras"
     test = "<CONACC>"
     while True:
         # i += 1
-        ser.write(test.encode())
-        print("send " + str(i))
-        time.sleep(1)
-
-
+        try:
+            ser.write(test.encode())
+        except:
+            print ("Write killed")
+        time.sleep(0.5)
+        print("send; sleep = 0.5")
+        
 
 # Open the serial port that connects to STM32. It may be connected on 
 # ACM0 or ACM1
@@ -218,8 +225,14 @@ thread_write.start()
 # Print a message from main as an indication that the program is 
 # running
 while True:
-    print("Alive - one second delay")
-    print("Uart message" + uart_message_handler.read_msg())
+    
+    pass
+
+# TODO: Detail the print statements below - useful for debugging
+
+print ("Working")
+print ("Sending and receiving messages at the following frequencies:")
+print ("TODO: Show frequency of tx and rx operations")
 
 
 # Close the serial port after using it
