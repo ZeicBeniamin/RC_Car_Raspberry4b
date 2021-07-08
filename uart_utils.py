@@ -1,4 +1,6 @@
 from enum import Enum
+import traceback
+import os
 
 class SwapFlag(Enum):
     SWP_BUFFER_READY = 1
@@ -148,6 +150,107 @@ class UartMessageHandler:
         # TODO: Test that message parsing works correctly            
         parsed = parse(aux)
         return parsed
+
+
+class UartIOHandler:
+    """ Sends messages through an UART port
+
+        Messages are sent through the already opoened UART port that is
+        stored in the object "ser".
+
+        Attributes
+        ----------
+        _ser : Serial
+            Object created with the help of the PySerial library. 
+            Facilitates communication through the port that it manages.
+        Methods
+        -------
+        TODO: Write method comments
+    """
+
+    def __init__(self, serial_port=None):
+        """
+        """
+        self._ser = serial_port
+        self._log = False
+
+    def set_serial_port(self, serial_port):
+        """ Set the serial port for UART communication
+
+            Parameters
+            ----------
+            serial_port : Serial
+                Serial object with already opened port to communicate through
+        """
+        self._ser = serial_port
+
+    def set_log_file(self, log_file):
+        """ Sets the file to be used for log messages
+
+        Parameters
+        ----------
+        log_file : file object
+            Already opened log file for writing log messages.
+        """
+        self._log = True
+        self._log_file = log_file
+
+    def write(self, message):
+        """ Writes message to UART port
+
+            If a log file was set in this class, after writing message to
+            UART it will also write the message to the log file.
+
+            Parameters
+            ----------
+            message : str
+                Message to write to UART port.
+        """
+        try:
+            self._ser.write(message.encode())
+        except:
+            print("UartWriter.write: serial write exception occured")
+            traceback.print_exc()
+        try:
+            if (self._log):
+                self._log_file.write(
+                    "UartIOHandler.write: write message to UART: " + message)
+                self._log_file.flush()
+                os.fsync(self._log_file.fileno())
+        except:
+            print("UartWriter.write: file writing exception")
+            traceback.print_exc()
+
+    def read(self):
+        """ Reads and decodes message from UART port
+
+            If a log file was set in this class, after reading the 
+            message from UART it will also write the message to the 
+            log file.
+
+            Returns
+            -------
+            message : str
+                The decoded message received through the UART port
+        """
+        message = None
+        try:
+            message = self._ser.read(8).decode()
+            # print("message is : ", message)
+        except:
+            print("UartWriter.read: serial read exception")
+            traceback.print_exc()
+        try:
+            if (self._log):
+                self._log_file.write(
+                    "UartIOHandler.read: read message from UART: " + message)
+                self._log_file.flush()
+                os.fsync(self._log_file.fileno())
+        except:
+            print("UartIOHandler.read: file write exception")
+            traceback.print_exc()
+        return message
+
 
 def parse(message):
     """ Rearrange the message received through UART

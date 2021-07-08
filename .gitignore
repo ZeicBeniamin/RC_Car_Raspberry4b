@@ -2,5 +2,9 @@
 *.out
 # Ignore files that begin with "test" - those are for testing purposes only
 test*
+# Ignore the logs folder
+logs/**
+# Ignore pycache files
+__pycache__
 
 .vscode/
